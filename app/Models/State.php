@@ -38,6 +38,11 @@ class State extends Model
         return $this->hasMany(City::class);
     }
 
+    public function organizations()
+    {
+        return $this->hasMany(Organization::class);
+    }
+
     /**
      * Get the full name with country.
      */

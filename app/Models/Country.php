@@ -38,4 +38,9 @@ class Country extends Model
     protected $casts = [
         'status' => 'boolean',
     ];
+
+    public function organizations()
+    {
+        return $this->hasMany(Organization::class);
+    }
 }
