@@ -50,7 +50,7 @@ class Organization extends Model
 
     public function members()
     {
-        return $this->belongsToMany(User::class, 'organization_user', 'organization_id', 'user_id');
+        return $this->belongsToMany(User::class, 'organization_user', 'organization_id', 'user_id')->withTimestamps();
     }
 
     public function country()

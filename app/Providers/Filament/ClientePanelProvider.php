@@ -28,11 +28,12 @@ class ClientePanelProvider extends PanelProvider
         return $panel
             ->id('cliente')
             ->path('cliente')
+            ->default()
             ->login()
             ->profile()
             ->spa()
             ->colors([
-                'primary' => Color::Amber,
+                'primary' => Color::Yellow,
             ])
             ->discoverResources(in: app_path('Filament/Cliente/Resources'), for: 'App\\Filament\\Cliente\\Resources')
             ->discoverPages(in: app_path('Filament/Cliente/Pages'), for: 'App\\Filament\\Cliente\\Pages')
@@ -63,6 +64,13 @@ class ClientePanelProvider extends PanelProvider
             )
             ->authMiddleware([
                 Authenticate::class,
-            ]);
+            ])
+            ->tenantMiddleware([
+                \BezhanSalleh\FilamentShield\Middleware\SyncShieldTenant::class,
+            ], isPersistent: true)
+            ->plugins([
+                \BezhanSalleh\FilamentShield\FilamentShieldPlugin::make(),
+            ])
+            ->sidebarCollapsibleOnDesktop();
     }
 }

@@ -2,12 +2,21 @@
 
 namespace App\Filament\Pages\Tenancy;
 
+use App\Filament\Resources\OrganizationResource\Pages;
+use App\Filament\Resources\OrganizationResource\RelationManagers;
+use App\Models\City;
+use App\Models\Country;
 use App\Models\Organization;
-use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\Section;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
+use App\Models\State;
+use Filament\Forms;
+use Filament\Forms\Get;
+use Filament\Forms\Set;
 use Filament\Forms\Form;
+use Filament\Resources\Resource;
+use Filament\Tables;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Filament\Pages\Tenancy\EditTenantProfile;
 use Illuminate\Support\Str;
 
@@ -22,68 +31,199 @@ class EditOrganizationProfile extends EditTenantProfile
     {
         return $form
             ->schema([
-                Section::make('Información Básica')
+                Forms\Components\Section::make('Información básica')
+                    ->description('Información principal de la organización')
+                    ->icon('heroicon-o-building-office')
+                    ->columns(3)
                     ->schema([
-                        TextInput::make('name')
-                            ->label('Nombre')
-                            ->required()
-                            ->maxLength(255)
-                            ->live(onBlur: true)
-                            ->afterStateUpdated(function (string $state, callable $set) {
-                                $set('slug', Str::slug($state));
-                            }),
-                            
-                        TextInput::make('slug')
-                            ->label('URL')
-                            ->required()
-                            ->unique(Organization::class, 'slug', ignoreRecord: true)
-                            ->maxLength(255),
-                            
-                        FileUpload::make('avatar')
-                            ->label('Logo')
+                        Forms\Components\FileUpload::make('avatar')
+                            ->label('Avatar')
+                            ->avatar()
+                            ->disk('public')
+                            ->directory('organizations/avatars')
                             ->image()
-                            ->directory('organizations')
-                            ->maxSize(1024),
+                            ->maxSize(2048)
+                            ->visibility('public')
+                            ->helperText('Imagen de la organización (max. 2MB)')
+                            ->columnSpan(1),
                             
-                        TextInput::make('support_email')
-                            ->label('Email de Soporte')
-                            ->email()
-                            ->maxLength(255),
+                        Forms\Components\Group::make()
+                            ->schema([
+                                Forms\Components\TextInput::make('name')
+                                    ->label('Nombre')
+                                    ->required()
+                                    ->maxLength(255),
+                                    
+                                Forms\Components\TextInput::make('support_email')
+                                    ->label('Email de soporte')
+                                    ->email()
+                                    ->maxLength(255),
+                            ])
+                            ->columnSpan(1),
+                            
+                        Forms\Components\Group::make()
+                            ->schema([
+                                Forms\Components\Select::make('status')
+                                    ->label('Estado')
+                                    ->options([
+                                        'active' => 'Activo',
+                                        'inactive' => 'Inactivo',
+                                        'pending' => 'Pendiente',
+                                    ])
+                                    ->default('active')
+                                    ->required()
+                                    ->selectablePlaceholder(false),
+                                    
+                                Forms\Components\TextInput::make('slug')
+                                    ->label('URL de la organización')
+                                    ->required()
+                                    ->unique(Organization::class, 'slug', ignoreRecord: true)
+                                    ->maxLength(255)
+                                    ->helperText('Esta será la URL para acceder a la organización'),
+                            ])
+                            ->columnSpan(1),
                     ]),
                     
-                Section::make('Dirección')
+                Forms\Components\Section::make('Dirección fiscal')
+                    ->description('Datos de facturación y localización')
+                    ->icon('heroicon-o-map-pin')
+                    ->columns(2)
+                    ->collapsed()
                     ->schema([
-                        TextInput::make('address')
+                        Forms\Components\TextInput::make('address')
                             ->label('Dirección')
                             ->maxLength(255),
-                            
-                        TextInput::make('city')
-                            ->label('Ciudad')
-                            ->maxLength(255),
-                            
-                        TextInput::make('country')
+                        Forms\Components\Select::make('country_id')
+                            ->relationship(name : 'country', titleAttribute:'name')
                             ->label('País')
-                            ->maxLength(255),
+                            ->searchable()
+                            ->preload()
+                            ->live()
+                            ->afterStateUpdated(function (Set $set) {
+                                $set('state_id',null);
+                                $set('city_id',null);
+                            } )
+                            ->required(),
+                        Forms\Components\Select::make('state_id')
+                            ->label('Estado/Provincia')
+                            ->options(function (Get $get): array {
+                                $countryId = $get('country_id');
+                                
+                                if (!$countryId) {
+                                    return [];
+                                }
+                                
+                                return State::query()
+                                    ->where('country_id', $countryId)
+                                    ->orderBy('name')
+                                    ->pluck('name', 'id')
+                                    ->toArray();
+                            })
+                            ->searchable()
+                            ->preload()
+                            ->live()
+                            ->afterStateUpdated(fn (Set $set) => $set('city_id', null))
+                            ->required()
+                            ->visible(fn (Get $get): bool => (bool) $get('country_id')),
+                        
+                            Forms\Components\Select::make('city_id')
+                            ->label('Ciudad')
+                            ->options(function (Get $get): array {
+                                $stateId = $get('state_id');
+                                $countryId = $get('country_id');
+                                
+                                // Caso especial para Reino Unido (o cualquier otro país que tenga problemas similares)
+                                $specialCountries = [
+                                    // Ajusta estos IDs según tus datos
+                                    'United Kingdom' => true,  // Por nombre
+                                    826 => true,               // Por ID ISO (ejemplo)
+                                    // Añade otros países con problemas similares si es necesario
+                                ];
+                                
+                                // Si es un país especial y hay un estado seleccionado
+                                $isSpecialCountry = isset($specialCountries[$countryId]) || 
+                                                  (is_string($countryId) && isset($specialCountries[$countryId]));
+                                
+                                if ($isSpecialCountry && $stateId) {
+                                    // Para países especiales, consulta más amplia para encontrar ciudades
+                                    return City::query()
+                                        ->where(function ($query) use ($stateId) {
+                                            // Buscar ciudades con este state_id
+                                            $query->where('state_id', $stateId)
+                                                // O ciudades donde el state_id podría estar en null pero relacionadas con el país
+                                                ->orWhereNull('state_id');
+                                        })
+                                        ->orderBy('name')
+                                        ->pluck('name', 'id')
+                                        ->toArray();
+                                }
+                                
+                                // Comportamiento estándar para el resto de países
+                                if (!$stateId) {
+                                    return [];
+                                }
+                                
+                                // Verificar si la consulta devuelve resultados
+                                $cities = City::query()
+                                    ->where('state_id', $stateId)
+                                    ->orderBy('name')
+                                    ->get();
+                                    
+                                // Si no hay ciudades para este estado, intentar un enfoque alternativo
+                                if ($cities->isEmpty() && $countryId) {
+                                    // Buscar ciudades por país en lugar de por estado
+                                    return City::query()
+                                        ->whereHas('state', function ($query) use ($countryId) {
+                                            $query->where('country_id', $countryId);
+                                        })
+                                        ->orderBy('name')
+                                        ->pluck('name', 'id')
+                                        ->toArray();
+                                }
+                                
+                                return $cities->pluck('name', 'id')->toArray();
+                            })
+                            ->searchable()
+                            ->preload()
+                            ->required()
+                            ->visible(fn (Get $get): bool => (bool) $get('state_id')),
                             
-                        TextInput::make('postcode')
-                            ->label('Código Postal')
-                            ->maxLength(255),
+                        Forms\Components\TextInput::make('postcode')
+                            ->label('Código postal')
+                            ->maxLength(20),
                     ]),
                     
-                Section::make('Información Fiscal')
+                Forms\Components\Section::make('Información tributaria')
+                    ->description('Datos fiscales para facturación')
+                    ->icon('heroicon-o-currency-dollar')
+                    ->columns(2)
+                    ->collapsed()
                     ->schema([
-                        TextInput::make('taxId')
-                            ->label('Identificación Fiscal')
-                            ->maxLength(255),
-                            
-                        TextInput::make('vat_country')
-                            ->label('País de IVA')
-                            ->maxLength(255),
-                            
-                        Toggle::make('taxable')
-                            ->label('¿Sujeto a impuestos?')
+                        Forms\Components\TextInput::make('tax_id')
+                            ->label('Numero de identificacion Fiscal - NIT/CIF/NIF/')
+                            ->maxLength(30),
+                        
+                        Forms\Components\Select::make('vat_country_id')
+                            ->relationship(name : 'country', titleAttribute:'name')
+                            ->label('País sujeto de Impuestos')
+                            ->searchable()
+                            ->preload()
+                            ->live()
+/*                             ->afterStateUpdated(function (Set $set) {
+                                $set('state_id',null);
+                                $set('city_id',null);
+                            } ) */
                             ->required(),
+                            
+                        Forms\Components\Toggle::make('taxable')
+                            ->label('Sujeto a impuestos')
+                            ->default(false)
+                            ->inline(false)
+                            ->onIcon('heroicon-s-check')
+                            ->offIcon('heroicon-s-x-mark'),
                     ]),
             ]);
     }
+
+    
 }

@@ -92,24 +92,17 @@ class OrganizationResource extends Resource
                         Forms\Components\TextInput::make('address')
                             ->label('Dirección')
                             ->maxLength(255),
-                            
                         Forms\Components\Select::make('country_id')
+                            ->relationship(name : 'country', titleAttribute:'name')
                             ->label('País')
-                            ->options(function (): array {
-                                return Country::query()
-                                    ->orderBy('name')
-                                    ->pluck('name', 'id')
-                                    ->toArray();
-                            })
                             ->searchable()
                             ->preload()
                             ->live()
                             ->afterStateUpdated(function (Set $set) {
-                                $set('state_id', null);
-                                $set('city_id', null);
-                            })
+                                $set('state_id',null);
+                                $set('city_id',null);
+                            } )
                             ->required(),
-                        
                         Forms\Components\Select::make('state_id')
                             ->label('Estado/Provincia')
                             ->options(function (Get $get): array {
@@ -132,20 +125,62 @@ class OrganizationResource extends Resource
                             ->required()
                             ->visible(fn (Get $get): bool => (bool) $get('country_id')),
                         
-                        Forms\Components\Select::make('city_id')
+                            Forms\Components\Select::make('city_id')
                             ->label('Ciudad')
                             ->options(function (Get $get): array {
                                 $stateId = $get('state_id');
+                                $countryId = $get('country_id');
                                 
+                                // Caso especial para Reino Unido (o cualquier otro país que tenga problemas similares)
+                                $specialCountries = [
+                                    // Ajusta estos IDs según tus datos
+                                    'United Kingdom' => true,  // Por nombre
+                                    826 => true,               // Por ID ISO (ejemplo)
+                                    // Añade otros países con problemas similares si es necesario
+                                ];
+                                
+                                // Si es un país especial y hay un estado seleccionado
+                                $isSpecialCountry = isset($specialCountries[$countryId]) || 
+                                                  (is_string($countryId) && isset($specialCountries[$countryId]));
+                                
+                                if ($isSpecialCountry && $stateId) {
+                                    // Para países especiales, consulta más amplia para encontrar ciudades
+                                    return City::query()
+                                        ->where(function ($query) use ($stateId) {
+                                            // Buscar ciudades con este state_id
+                                            $query->where('state_id', $stateId)
+                                                // O ciudades donde el state_id podría estar en null pero relacionadas con el país
+                                                ->orWhereNull('state_id');
+                                        })
+                                        ->orderBy('name')
+                                        ->pluck('name', 'id')
+                                        ->toArray();
+                                }
+                                
+                                // Comportamiento estándar para el resto de países
                                 if (!$stateId) {
                                     return [];
                                 }
                                 
-                                return City::query()
+                                // Verificar si la consulta devuelve resultados
+                                $cities = City::query()
                                     ->where('state_id', $stateId)
                                     ->orderBy('name')
-                                    ->pluck('name', 'id')
-                                    ->toArray();
+                                    ->get();
+                                    
+                                // Si no hay ciudades para este estado, intentar un enfoque alternativo
+                                if ($cities->isEmpty() && $countryId) {
+                                    // Buscar ciudades por país en lugar de por estado
+                                    return City::query()
+                                        ->whereHas('state', function ($query) use ($countryId) {
+                                            $query->where('country_id', $countryId);
+                                        })
+                                        ->orderBy('name')
+                                        ->pluck('name', 'id')
+                                        ->toArray();
+                                }
+                                
+                                return $cities->pluck('name', 'id')->toArray();
                             })
                             ->searchable()
                             ->preload()
@@ -163,16 +198,21 @@ class OrganizationResource extends Resource
                     ->columns(2)
                     ->collapsed()
                     ->schema([
-                        Forms\Components\TextInput::make('idTax')
+                        Forms\Components\TextInput::make('tax_id')
                             ->label('Numero de identificacion Fiscal - NIT/CIF/NIF/')
                             ->maxLength(30),
                         
-                        Forms\Components\TextInput::make('vat')
-                            ->label('IVA/VAT (%)')
-                            ->numeric()
-                            ->minValue(0)
-                            ->maxValue(100)
-                            ->suffix('%'),
+                        Forms\Components\Select::make('vat_country_id')
+                            ->relationship(name : 'country', titleAttribute:'name')
+                            ->label('País sujeto de Impuestos')
+                            ->searchable()
+                            ->preload()
+                            ->live()
+/*                             ->afterStateUpdated(function (Set $set) {
+                                $set('state_id',null);
+                                $set('city_id',null);
+                            } ) */
+                            ->required(),
                             
                         Forms\Components\Toggle::make('taxable')
                             ->label('Sujeto a impuestos')
@@ -205,6 +245,10 @@ class OrganizationResource extends Resource
                         'pending' => 'warning',
                         default => 'gray',
                     }),
+                Tables\Columns\ImageColumn::make('members.avatar')
+                    ->label('Team Members')
+                    ->circular()
+                    ->stacked(),
                 Tables\Columns\TextColumn::make('address')
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -243,7 +287,7 @@ class OrganizationResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            RelationManagers\MembersRelationManager::class,
         ];
     }
 

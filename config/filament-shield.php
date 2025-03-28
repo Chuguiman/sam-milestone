@@ -9,7 +9,7 @@ return [
         'navigation_group' => true,
         'is_globally_searchable' => false,
         'show_model_path' => true,
-        'is_scoped_to_tenant' => true,
+        'is_scoped_to_tenant' => false,
         'cluster' => null,
     ],
 
@@ -27,9 +27,25 @@ return [
     ],
 
     'panel_user' => [
-        'enabled' => true,
+        'enabled' => false,
         'name' => 'panel_user',
     ],
+
+/*     'cliente_user' => [
+        'enabled' => true,
+        'name' => 'Admin',
+    ],
+
+    'cliente_user' => [
+        'enabled' => true,
+        'name' => 'User',
+    ],
+
+    'cliente_user' => [
+        'enabled' => true,
+        'name' => 'Registered',
+    ], */
+
 
     'permission_prefixes' => [
         'resource' => [

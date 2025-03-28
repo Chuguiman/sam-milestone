@@ -7,11 +7,13 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "bezhansalleh/filament-panel-switch": "^1.0",
         "bezhansalleh/filament-shield": "^3.3",
         "filament/filament": "^3.3",
         "laravel/framework": "^12.0",
         "laravel/tinker": "^2.10.1",
-        "nnjeim/world": "^1.1"
+        "nnjeim/world": "^1.1",
+        "shanerbaner82/panel-roles": "^0.0.3"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
