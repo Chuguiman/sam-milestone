@@ -33,6 +33,7 @@ class User extends Authenticatable implements FilamentUser, HasTenants
         'email',
         'avatar',
         'password',
+        'country_code', // Añadido para gestión de precios por país
     ];
 
     /**
@@ -58,17 +59,27 @@ class User extends Authenticatable implements FilamentUser, HasTenants
         ];
     }
 
+    /**
+     * Get the organizations that the user belongs to.
+     */
     public function organizations(): BelongsToMany
     {
         return $this->belongsToMany(Organization::class, 'organization_user', 'user_id', 'organization_id')
+            ->withPivot('role')
             ->withTimestamps();
     }
 
+    /**
+     * Get tenants for Filament Panel.
+     */
     public function getTenants(Panel $panel): Collection
     {
         return $this->organizations;
     }
  
+    /**
+     * Check if user can access a specific tenant.
+     */
     public function canAccessTenant(Model $tenant): bool
     {
         if (!$tenant instanceof Organization) {
@@ -78,11 +89,101 @@ class User extends Authenticatable implements FilamentUser, HasTenants
         return $this->organizations()->whereKey($tenant->getKey())->exists();
     }
 
+    /**
+     * Check if user can access a panel.
+     */
     public function canAccessPanel(Panel $panel): bool
     {
         return true;
     }
 
+    /**
+     * Get the user's current active organization.
+     */
+    public function currentOrganization()
+    {
+        // Si hay una organización activa en la sesión, devolver esa
+        $organizationId = session('current_organization_id');
+        
+        if ($organizationId) {
+            $organization = $this->organizations->find($organizationId);
+            if ($organization) {
+                return $organization;
+            }
+        }
+        
+        // De lo contrario, devolver la primera organización
+        return $this->organizations->first();
+    }
+
+    /**
+     * Switch the user's context to a different organization.
+     */
+    public function switchOrganization(Organization $organization): bool
+    {
+        if (!$this->organizations->contains($organization)) {
+            return false;
+        }
+        
+        session(['current_organization_id' => $organization->id]);
+        
+        return true;
+    }
+
+    /**
+     * Check if the user has a specific role in an organization.
+     */
+    public function hasOrganizationRole(Organization $organization, string $role): bool
+    {
+        return $this->organizations()
+            ->where('organizations.id', $organization->id)
+            ->wherePivot('role', $role)
+            ->exists();
+    }
+
+    /**
+     * Get the user's role in an organization.
+     */
+    public function getOrganizationRole(Organization $organization): ?string
+    {
+        $pivot = $this->organizations()
+            ->where('organizations.id', $organization->id)
+            ->first()?->pivot;
+            
+        return $pivot ? $pivot->role : null;
+    }
+
+    /**
+     * Check if the user is an admin of any organization.
+     */
+    public function isAdminOfAnyOrganization(): bool
+    {
+        return $this->organizations()
+            ->wherePivotIn('role', ['admin', 'owner'])
+            ->exists();
+    }
+
+    /**
+     * Get all organizations where the user is an admin.
+     */
+    public function adminOrganizations()
+    {
+        return $this->organizations()
+            ->wherePivotIn('role', ['admin', 'owner']);
+    }
+
+    /**
+     * Check if the user is an admin of a specific organization.
+     */
+    public function isAdminOf(Organization $organization): bool
+    {
+        return $this->hasOrganizationRole($organization, 'admin') || 
+               $this->hasOrganizationRole($organization, 'owner');
+    }
+
+    /**
+     * Boot the model.
+     */
     protected static function booted(): void
     {
         if (config('filament-shield.cliente_user.enabled', false)) {

@@ -55,10 +55,15 @@ class ClientePanelProvider extends PanelProvider
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
             ])
-            ->tenant(Organization::class)
-            /* ->tenantRegistration(
+            ->registration()
+            ->tenant(
+                Organization::class,
+                /* slugAttribute:'slug',
+                ownershipRelationship: 'members' */
+            )
+            ->tenantRegistration(
                 RegisterOrganization::class,
-            ) */
+            )
             ->tenantProfile(
                 EditOrganizationProfile::class,
             )
@@ -71,6 +76,6 @@ class ClientePanelProvider extends PanelProvider
             ->plugins([
                 \BezhanSalleh\FilamentShield\FilamentShieldPlugin::make(),
             ])
-            ->sidebarCollapsibleOnDesktop();
+            ;
     }
 }
