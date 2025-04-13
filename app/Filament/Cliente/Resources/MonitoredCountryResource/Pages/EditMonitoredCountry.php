@@ -1,14 +1,14 @@
 <?php
 
-namespace App\Filament\Cliente\Resources\UserResource\Pages;
+namespace App\Filament\Cliente\Resources\MonitoredCountryResource\Pages;
 
-use App\Filament\Cliente\Resources\UserResource;
+use App\Filament\Cliente\Resources\MonitoredCountryResource;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
 
-class EditUser extends EditRecord
+class EditMonitoredCountry extends EditRecord
 {
-    protected static string $resource = UserResource::class;
+    protected static string $resource = MonitoredCountryResource::class;
 
     protected function getHeaderActions(): array
     {

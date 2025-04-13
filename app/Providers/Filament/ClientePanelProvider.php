@@ -9,6 +9,7 @@ use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
+use Filament\Navigation\NavigationItem;
 use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
@@ -35,6 +36,11 @@ class ClientePanelProvider extends PanelProvider
             ->colors([
                 'primary' => Color::Yellow,
             ])
+            ->navigationItems([
+                NavigationItem::make('Mi Suscripción')
+                    ->icon('heroicon-o-credit-card')
+                    //->url(fn () => route('filament.cliente.pages.my-subscription', ['tenant' => auth()->user()->organization]))
+                    ->sort(2)])
             ->discoverResources(in: app_path('Filament/Cliente/Resources'), for: 'App\\Filament\\Cliente\\Resources')
             ->discoverPages(in: app_path('Filament/Cliente/Pages'), for: 'App\\Filament\\Cliente\\Pages')
             ->pages([
@@ -55,15 +61,15 @@ class ClientePanelProvider extends PanelProvider
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
             ])
-            ->registration()
+            //->registration()
             ->tenant(
                 Organization::class,
                 /* slugAttribute:'slug',
                 ownershipRelationship: 'members' */
             )
-            ->tenantRegistration(
+/*             ->tenantRegistration(
                 RegisterOrganization::class,
-            )
+            ) */
             ->tenantProfile(
                 EditOrganizationProfile::class,
             )
@@ -75,7 +81,6 @@ class ClientePanelProvider extends PanelProvider
             ], isPersistent: true)
             ->plugins([
                 \BezhanSalleh\FilamentShield\FilamentShieldPlugin::make(),
-            ])
-            ;
+            ]);
     }
 }

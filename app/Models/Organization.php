@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use Filament\Facades\Filament;
 use Laravel\Cashier\Billable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class Organization extends Model
@@ -35,6 +38,28 @@ class Organization extends Model
     protected $casts = [
         'taxable' => 'boolean',
     ];
+
+    protected $attributes = [
+        'status' => 'active',
+        'taxable' => false,
+    ];
+    
+    // Método para crear suscripción con Cashier
+    public function createSubscription(Plan $plan, $options = [])
+    {
+        // Mapear opciones de tu formulario a Cashier
+        return $this->newSubscription(
+            'default', // nombre de la suscripción
+            $plan->stripe_price_id // ID del precio de Stripe
+        )
+        ->create(null, [
+            'metadata' => [
+                'organization_id' => $this->id,
+                'plan_id' => $plan->id,
+                // Otros metadatos personalizados
+            ]
+        ]);
+    }
 
     protected static function boot()
     {
@@ -194,7 +219,7 @@ class Organization extends Model
      */
     public function orders(): HasMany
     {
-        return $this->hasMany(Order::class, 'tenant_id');
+        return $this->hasMany(Order::class, 'organization_id');
     }
 
     /**
@@ -251,4 +276,168 @@ class Organization extends Model
     {
         return $this->members()->wherePivot('role', 'owner')->first();
     }
+
+
+
+/**
+ * Obtiene los países monitoreados por esta organización.
+ */
+public function monitoredCountries()
+{
+    return $this->hasMany(MonitoredCountry::class);
+}
+
+/**
+ * Obtiene los países monitoreados activos.
+ */
+public function activeMonitoredCountries()
+{
+    return $this->monitoredCountries()->where('is_active', true);
+}
+
+/**
+ * Comprueba si la organización está monitoreando un país específico.
+ *
+ * @param int $countryId
+ * @return bool
+ */
+public function isMonitoringCountry($countryId)
+{
+    return $this->monitoredCountries()
+        ->where('country_id', $countryId)
+        ->where('is_active', true)
+        ->exists();
+}
+
+/**
+ * Añade un país para monitorear.
+ *
+ * @param int $countryId
+ * @param array $settings
+ * @return MonitoredCountry
+ */
+public function addMonitoredCountry($countryId, $settings = [])
+{
+    return $this->monitoredCountries()->updateOrCreate(
+        ['country_id' => $countryId],
+        [
+            'is_active' => true,
+            'settings' => $settings,
+        ]
+    );
+}
+
+/**
+ * Desactiva el monitoreo de un país.
+ *
+ * @param int $countryId
+ * @return bool
+ */
+public function removeMonitoredCountry($countryId)
+{
+    $monitoredCountry = $this->monitoredCountries()
+        ->where('country_id', $countryId)
+        ->first();
+        
+    if ($monitoredCountry) {
+        $monitoredCountry->is_active = false;
+        return $monitoredCountry->save();
+    }
+    
+    return false;
+}
+
+/**
+ * Obtiene el límite de países que puede monitorear esta organización según su plan.
+ * Este método lee el límite desde los metadatos de la organización.
+ *
+ * @return int 0 significa sin límite
+ */
+public function getMonitoredCountriesLimit()
+{
+    $metadata = json_decode($this->metadata ?? '{}', true);
+    return $metadata['limits']['max_countries'] ?? 0;
+}
+
+/**
+ * Verifica si la organización ha alcanzado su límite de países monitoreados.
+ *
+ * @return bool
+ */
+public function hasReachedMonitoredCountriesLimit()
+{
+    $limit = $this->getMonitoredCountriesLimit();
+    
+    if ($limit <= 0) {
+        return false; // Sin límite
+    }
+    
+    $count = $this->activeMonitoredCountries()->count();
+    return $count >= $limit;
+}
+
+public function activeSubscription()
+    {
+        return $this->hasOne(Subscription::class)
+            ->where(function ($query) {
+                $query->where('stripe_status', 'active')
+                      ->orWhere('stripe_status', 'complete')  // Agregar este estado
+                      ->orWhere('stripe_status', 'trialing');
+            })
+            ->where(function ($query) {
+                $query->whereNull('ends_at')
+                    ->orWhere('ends_at', '>', now());
+            })
+            ->latest();
+    }
+
+
+    public function canManageFeatures()
+{
+    $user = Auth::user();
+    
+    if (!$user) {
+        return false;
+    }
+    
+    // Intenta obtener la organización del tenant de Filament primero
+    $tenant = Filament::getTenant();
+    
+    // Si no hay tenant, intenta obtenerlo del usuario
+    if (!$tenant && method_exists($user, 'organization')) {
+        $tenant = $user->organization;
+    }
+    
+    // Si aún no hay tenant, verifica directamente en la base de datos
+    if (!$tenant) {
+        $tenant = \App\Models\Organization::find($user->organization_id);
+    }
+    
+    // Si definitivamente no hay tenant, no se pueden administrar características
+    if (!$tenant) {
+        return false;
+    }
+    
+    // Ahora verificamos si el usuario es admin
+    if (method_exists($tenant, 'userIsAdmin')) {
+        return $tenant->userIsAdmin($user);
+    }
+    
+    // Si no hay método userIsAdmin, verificamos la relación directamente
+    $role = DB::table('organization_user')
+        ->where('organization_id', $tenant->id)
+        ->where('user_id', $user->id)
+        ->value('role');
+    
+    return in_array($role, ['admin', 'owner']);
+}
+
+/* public function userIsAdmin(User $user)
+{
+    return $this->members()
+        ->wherePivot('user_id', $user->id)
+        ->wherePivotIn('role', ['admin', 'owner'])
+        ->exists();
+} */
+
 }

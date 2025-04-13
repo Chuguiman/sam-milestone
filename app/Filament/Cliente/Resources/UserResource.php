@@ -5,6 +5,7 @@ namespace App\Filament\Cliente\Resources;
 use App\Filament\Cliente\Resources\UserResource\Pages;
 use App\Filament\Cliente\Resources\UserResource\RelationManagers;
 use App\Models\User;
+use Filament\Facades\Filament;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -14,6 +15,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Facades\Auth;
 
 class UserResource extends Resource
 {
@@ -21,28 +23,12 @@ class UserResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-users';
 
-    protected static ?string $navigationGroup = 'User Management';
+    protected static ?string $navigationGroup = 'Settings';
 
     protected static ?string $tenantRelationshipName = 'members';
     
     protected static ?string $tenantOwnershipRelationshipName = 'organizations';
 
-    public static function getEloquentQuery(): Builder
-    {
-        $query = parent::getEloquentQuery();
-        $user = auth()->user();
-        
-        // Verificar rol
-        $isSuperAdmin = $user->roles()->where('name', 'super_admin')->exists();
-        $isAdmin = $user->roles()->where('name', 'Admin')->exists();
-        
-        // Si es usuario regular, solo ver su propio perfil
-        if (!$isSuperAdmin && !$isAdmin) {
-            $query->where('id', $user->id);
-        }
-        
-        return $query;
-    }
 
     public static function form(Form $form): Form
     {
@@ -114,9 +100,10 @@ class UserResource extends Resource
                             ->relationship('roles', 'name')
                             ->multiple()
                             ->preload()
+                            ->live()
                             ->disableOptionWhen(function ($value, $label) {
                                 // Obtener el usuario actual
-                                $user = auth()->user();
+                                $user = Auth::user();
                                 
                                 // Verificar si el usuario tiene el rol "user"
                                 $isUser = $user->roles()->where('name', 'User')->exists();
@@ -159,8 +146,7 @@ class UserResource extends Resource
                                     $record->roles()->sync($state);
                                 }
                             })
-                            ->multiple()
-                            ->preload()
+                            
                         
                     ]),
             ]);
@@ -215,5 +201,43 @@ class UserResource extends Resource
             'create' => Pages\CreateUser::route('/create'),
             'edit' => Pages\EditUser::route('/{record}/edit'),
         ];
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+        $user = Auth::user();
+        
+        // Verificar rol
+        $isSuperAdmin = $user->roles()->where('name', 'super_admin')->exists();
+        $isAdmin = $user->roles()->where('name', 'Admin')->exists();
+        
+        // Si es usuario regular, solo ver su propio perfil
+        if (!$isSuperAdmin && !$isAdmin) {
+            $query->where('id', $user->id);
+        }
+        
+        // En todos los casos, filtrar solo por usuarios de la organización actual
+        $tenant = Filament::getTenant();
+        if ($tenant) {
+            $query->whereHas('organizations', function ($q) use ($tenant) {
+                $q->where('organizations.id', $tenant->id);
+            });
+        }
+        
+        return $query;
+    }
+
+    public static function getNavigationBadge(): ?string
+    {
+        // Obtener solo el conteo de usuarios de la organización actual
+        $tenant = Filament::getTenant();
+        
+        if (!$tenant) {
+            return null;
+        }
+        
+        // Obtener el conteo de usuarios en la organización actual
+        return $tenant->members()->count();
     }
 }

@@ -4,8 +4,87 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "7cd36372726a32af833d5a215f1ea17a",
+    "content-hash": "352c31309e633f6312773129f11e4c92",
     "packages": [
+        {
+            "name": "andreia/filament-stripe-payment-link",
+            "version": "v1.1.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/andreia/filament-stripe-payment-link.git",
+                "reference": "3618a713d4ad7964204325a59e3c9675869fec0f"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/andreia/filament-stripe-payment-link/zipball/3618a713d4ad7964204325a59e3c9675869fec0f",
+                "reference": "3618a713d4ad7964204325a59e3c9675869fec0f",
+                "shasum": ""
+            },
+            "require": {
+                "filament/filament": "^3.0",
+                "php": "^8.1",
+                "spatie/laravel-package-tools": "^1.15.0",
+                "stripe/stripe-php": "^16.0"
+            },
+            "require-dev": {
+                "laravel/pint": "^1.0",
+                "nunomaduro/collision": "^8.1.1||^7.10.0",
+                "nunomaduro/larastan": "^2.0.1",
+                "orchestra/testbench": "^9.0.0||^8.22.0",
+                "pestphp/pest": "^2.1",
+                "pestphp/pest-plugin-arch": "^2.0",
+                "pestphp/pest-plugin-laravel": "^2.0",
+                "pestphp/pest-plugin-livewire": "^2.1",
+                "phpstan/extension-installer": "^1.1",
+                "phpstan/phpstan-deprecation-rules": "^1.0",
+                "phpstan/phpstan-phpunit": "^1.0",
+                "spatie/laravel-ray": "^1.26"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "Andreia\\FilamentStripePaymentLink\\FilamentStripePaymentLinkServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Andreia\\FilamentStripePaymentLink\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Andreia Bohner",
+                    "email": "andreiabohner@gmail.com",
+                    "role": "Developer"
+                }
+            ],
+            "description": "Filament action to generate a Stripe payment link",
+            "homepage": "https://github.com/andreia/filament-stripe-payment-link",
+            "keywords": [
+                "filament",
+                "filament-stripe-payment-link",
+                "laravel",
+                "payment link",
+                "stripe"
+            ],
+            "support": {
+                "issues": "https://github.com/andreia/filament-stripe-payment-link/issues",
+                "source": "https://github.com/andreia/filament-stripe-payment-link"
+            },
+            "funding": [
+                {
+                    "url": "https://github.com/andreia",
+                    "type": "github"
+                }
+            ],
+            "time": "2025-01-11T22:52:55+00:00"
+        },
         {
             "name": "anourvalar/eloquent-serialize",
             "version": "1.2.29",
@@ -3392,6 +3471,79 @@
                 }
             ],
             "time": "2025-03-12T20:24:15+00:00"
+        },
+        {
+            "name": "maartenpaauw/filament-cashier-billing-provider",
+            "version": "2.2.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/maartenpaauw/filament-cashier-billing-provider.git",
+                "reference": "398d41f6e9b2141fe6845bf45bd7e0534d71a7b7"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/maartenpaauw/filament-cashier-billing-provider/zipball/398d41f6e9b2141fe6845bf45bd7e0534d71a7b7",
+                "reference": "398d41f6e9b2141fe6845bf45bd7e0534d71a7b7",
+                "shasum": ""
+            },
+            "require": {
+                "filament/filament": "^3.2.39",
+                "illuminate/config": "^11.0|^12.0",
+                "illuminate/http": "^11.0|^12.0",
+                "illuminate/support": "^11.0|^12.0",
+                "laravel/cashier": "^15.2",
+                "php": "^8.2"
+            },
+            "require-dev": {
+                "laravel/pint": "^1.0",
+                "pestphp/pest": "^3.7",
+                "spatie/ray": "^1.28"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Maartenpaauw\\Filament\\Cashier\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Maarten Paauw",
+                    "email": "maartenpaauw@gmail.com",
+                    "role": "Developer"
+                }
+            ],
+            "description": "Filament billing provider for Laravel Cashier",
+            "homepage": "https://github.com/maartenpaauw/filament-cashier-billing-provider",
+            "keywords": [
+                "billing-provider",
+                "cashier",
+                "filament",
+                "laravel",
+                "maartenpaauw"
+            ],
+            "support": {
+                "issues": "https://github.com/maartenpaauw/filament-cashier-billing-provider/issues",
+                "source": "https://github.com/maartenpaauw/filament-cashier-billing-provider/tree/2.2.0"
+            },
+            "funding": [
+                {
+                    "url": "https://filamentphp.com/plugins/maartenpaauw-model-states",
+                    "type": "custom"
+                },
+                {
+                    "url": "https://filamentphp.com/plugins/maartenpaauw-pennant",
+                    "type": "custom"
+                },
+                {
+                    "url": "https://github.com/maartenpaauw",
+                    "type": "github"
+                }
+            ],
+            "time": "2025-03-02T09:21:21+00:00"
         },
         {
             "name": "masterminds/html5",
@@ -10413,12 +10565,12 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {},
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
         "php": "^8.2"
     },
-    "platform-dev": [],
+    "platform-dev": {},
     "plugin-api-version": "2.6.0"
 }

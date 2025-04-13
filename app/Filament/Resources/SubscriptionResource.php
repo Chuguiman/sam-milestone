@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use Andreia\FilamentStripePaymentLink\Forms\Actions\GenerateStripeLinkAction;
 use App\Filament\Resources\SubscriptionResource\Pages;
 use App\Filament\Resources\SubscriptionResource\RelationManagers;
 use App\Models\Discount;
@@ -10,8 +11,12 @@ use App\Models\Plan;
 use App\Models\Country;
 use App\Models\Subscription;
 use App\Models\AddOn;
+use App\Notifications\SubscriptionActivated;
+use App\Services\StripeCheckoutService;
 use Filament\Forms;
+use Filament\Forms\Components\Tabs\Tab;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -767,7 +772,11 @@ class SubscriptionResource extends Resource
                             })
                             ->helperText('Selecciona los complementos que deseas añadir. Los precios se ajustan según el ciclo de facturación.'),
                             
-                        // Campos ocultos para procesar los add-ons seleccionados
+                        Forms\Components\TextInput::make('stripe_payment_link')
+                            ->required()
+                            ->suffixAction(GenerateStripeLinkAction::make('stripe_payment_link')),
+                        
+                            // Campos ocultos para procesar los add-ons seleccionados
                         Forms\Components\Hidden::make('selected_addons_data')
                             ->dehydrateStateUsing(function (Forms\Get $get) {
                                 $addonItems = $get('selected_addons') ?? [];
@@ -1236,6 +1245,49 @@ class SubscriptionResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\Action::make('checkout')
+                    ->label('Checkout a Stripe')
+                    ->icon('heroicon-o-credit-card')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->action(function (Subscription $record) {
+                        try {
+                            // Validaciones previas
+/*                             if ($record->status !== 'incomplete') {
+                                throw new \Exception('Solo se pueden enviar a Stripe suscripciones en estado pendiente');
+                            } */
+                
+                            // Obtener URL de checkout
+                            $url = app(StripeCheckoutService::class)
+                                ->createCheckoutSession($record);
+                
+                            // Redirigir al usuario
+                            return redirect()->away($url);
+                
+                        } catch (\Exception $e) {
+                            // Notificación de error amigable
+                            Notification::make()
+                                ->title('Error al generar enlace de pago')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                
+                            // Log del error para seguimiento
+                            Log::error('Checkout Stripe Error: ' . $e->getMessage(), [
+                                'subscription_id' => $record->id,
+                                'error' => $e
+                            ]);
+                
+                            // Prevenir redireccionamiento
+                            return null;
+                        }
+                    }),
+                    // Visibilidad condicional
+                    /* ->visible(fn (Subscription $record) => 
+                        $record->status === 'incomplete' && 
+                        $record->plan && 
+                        $record->organization
+                ) */
                 Tables\Actions\Action::make('cancelSubscription')
                     ->label('Cancelar')
                     ->icon('heroicon-o-x-circle')
@@ -1287,11 +1339,22 @@ class SubscriptionResource extends Resource
             $data['_addons'] = $selectedAddons;
         }
         
+        // Añadir valores por defecto para campos requeridos
+        $data['stripe_id'] = 'sub_' . uniqid(); // Generar un ID único para la suscripción
+        $data['ends_at'] = null; // Inicialmente no tiene fecha de finalización
+        $data['type'] = 'regular'; 
+        $data['starts_at'] = now();
+        $data['stripe_status'] = 'pending';
+        $data['status'] = 'pending';
+        
         return $data;
     }
     
     public static function afterCreate(Subscription $record, array $data): void
     {
+        
+        $stripeService = new StripeCheckoutService();
+        $checkoutUrl = $stripeService->createCheckoutSession($record);
         // Procesar los addons después de crear la suscripción
         if (isset($data['_addons'])) {
             foreach ($data['_addons'] as $addon) {
@@ -1306,63 +1369,45 @@ class SubscriptionResource extends Resource
                 ]);
             }
         }
-        
-        // Si necesitas crear la suscripción en Stripe, aquí sería el lugar
-        if ($record->organization && !$record->stripe_id) {
-            try {
-                // Implementación de ejemplo para Stripe - adaptar según tus necesidades
-                /*
-                $stripeCustomer = $record->organization->createOrGetStripeCustomer();
-                
-                $stripeSubscriptionArray = [
-                    'customer' => $stripeCustomer->id,
-                    'items' => [
-                        ['price' => $record->plan->getPriceForCountry($record->organization->country_code)->stripe_price_id],
-                    ],
-                    'metadata' => [
-                        'subscription_id' => $record->id,
-                        'organization_id' => $record->organization_id,
-                    ],
-                ];
-                
-                // Añadir addons si existen
-                if (isset($data['_addons'])) {
-                    foreach ($data['_addons'] as $addon) {
-                        $stripeAddonPrice = AddOn::find($addon['addon_id'])->getPriceForCountry($record->organization->country_code)->stripe_price_id;
-                        if ($stripeAddonPrice) {
-                            $stripeSubscriptionArray['items'][] = [
-                                'price' => $stripeAddonPrice,
-                                'quantity' => $addon['quantity']
-                            ];
-                        }
-                    }
-                }
-                
-                // Aplicar descuento si existe
-                if ($record->discount_id) {
-                    $discount = Discount::find($record->discount_id);
-                    if ($discount && $discount->stripe_coupon_id) {
-                        $stripeSubscriptionArray['coupon'] = $discount->stripe_coupon_id;
-                    }
-                }
-                
-                // Periodo de prueba si aplica
-                if ($record->trial_ends_at) {
-                    $stripeSubscriptionArray['trial_end'] = $record->trial_ends_at->getTimestamp();
-                }
-                
-                $stripeSubscription = \Stripe\Subscription::create($stripeSubscriptionArray);
-                
-                // Actualizar la suscripción con los datos de Stripe
-                $record->update([
-                    'stripe_id' => $stripeSubscription->id,
-                    'stripe_status' => $stripeSubscription->status,
+    
+        // Crear suscripción en Stripe
+        try {
+            $organization = $record->organization;
+            $plan = $record->plan;
+    
+            // Asegúrate de que la organización tenga un cliente de Stripe
+            if (!$organization->stripe_id) {
+                $organization->createAsStripeCustomer([
+                    'name' => $organization->name,
+                    'email' => $organization->email, // Asume que tienes un campo de email
                 ]);
-                */
-            } catch (\Exception $e) {
-                Log::error('Error al crear suscripción en Stripe: ' . $e->getMessage());
-                // Manejar el error según tus necesidades
             }
+    
+            // Crear suscripción de Stripe
+            $stripeSubscription = $organization->newSubscription(
+                'default', 
+                $plan->stripe_price_id
+            )
+            ->create(null, [
+                'metadata' => [
+                    'subscription_id' => $record->id,
+                    'organization_id' => $organization->id,
+                    'plan_id' => $plan->id,
+                ]
+            ]);
+    
+            // Actualizar el registro de suscripción con los detalles de Stripe
+            $record->update([
+                'stripe_id' => $stripeSubscription->id,
+                'stripe_status' => $stripeSubscription->status,
+            ]);
+    
+        } catch (\Exception $e) {
+            // Manejar errores de Stripe
+            Log::error('Error al crear suscripción en Stripe: ' . $e->getMessage());
+            
+            // Opcional: lanzar una excepción o manejar el error según tus necesidades
+            throw new \Exception('No se pudo crear la suscripción en Stripe: ' . $e->getMessage());
         }
     }
     
@@ -1415,5 +1460,21 @@ class SubscriptionResource extends Resource
             */
         }
     }
+
+    protected function handleCheckoutCompleted($session)
+    {
+        $subscription = Subscription::findOrFail($session->client_reference_id);
+
+        $subscription->update([
+            'status' => 'active',
+            'stripe_subscription_id' => $session->subscription,
+            'paid_at' => now(),
+            'stripe_status' => 'active'
+        ]);
+
+        // Notificar al usuario
+        $subscription->organization->notify(new SubscriptionActivated($subscription));
+    }
+
 
 }

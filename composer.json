@@ -7,14 +7,17 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "andreia/filament-stripe-payment-link": "^1.1",
         "bezhansalleh/filament-panel-switch": "^1.0",
         "bezhansalleh/filament-shield": "^3.3",
         "filament/filament": "^3.3",
         "laravel/cashier": "^15.6",
         "laravel/framework": "^12.0",
         "laravel/tinker": "^2.10.1",
+        "maartenpaauw/filament-cashier-billing-provider": "^2.2",
         "nnjeim/world": "^1.1",
-        "shanerbaner82/panel-roles": "^0.0.3"
+        "shanerbaner82/panel-roles": "^0.0.3",
+        "stripe/stripe-php": "^16.6"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
